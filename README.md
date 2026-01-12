@@ -10,19 +10,20 @@ The tool encrypts `.env` files and other configuration files, making them safe t
 
 ## Why This Tool?
 
-I came across discussions online about the security risks of `.env` files - they're plain text and easily exposed if accidentally committed to version control or shared insecurely. I designed and built this solution from the ground up to address that problem. The combination of **ChaCha20-Poly1305** for encryption and **BLAKE2s** for integrity verification ensures:
+I came across discussions online about the security risks of `.env` files - they're plain text and easily exposed if accidentally committed to version control or shared insecurely. I designed and built this solution from the ground up to address that problem. The combination of **ChaCha20-Poly1305** for encryption, **PBKDF2-HMAC** for key derivation, and **BLAKE2s** for integrity verification ensures:
 
 - **Speed**: ChaCha20-Poly1305 is optimized for performance on any device, including mobile and embedded systems
-- **Security**: AEAD (Authenticated Encryption with Associated Data) protects against tampering
+- **Security**: AEAD (Authenticated Encryption with Associated Data) protects against tampering, and PBKDF2 with 300,000 iterations makes brute-force attacks computationally expensive
 - **Portability**: BLAKE2s provides fast, cryptographic hashing that works efficiently across platforms
 - **Simplicity**: Easy-to-use CLI for developers who just want things to work
 
 ## Features
 
 - 🔒 **Strong Encryption**: ChaCha20-Poly1305 AEAD cipher
-- ✅ **Integrity Verification**: BLAKE2s hashing prevents tampering
+- 🔑 **Key Derivation**: PBKDF2-HMAC-SHA256 with 300,000 iterations for password-based key generation
+- ✅ **Integrity Verification**: BLAKE2s hashing prevents tampering with constant-time comparison
 - 🚀 **Fast Performance**: Optimized for speed on any device
-- 🔑 **Key-based Security**: Password-derived encryption keys
+- 🛡️ **Defense Against Attacks**: Protection against brute-force, timing attacks, and data tampering
 - 📦 **Compiled Output**: Creates `.compiled` files for secure distribution
 - 🗑️ **Auto-cleanup**: Optionally removes original files after encryption
 
@@ -103,24 +104,28 @@ Binary file structure:
 1. **Encryption Process**:
    - Reads key-value pairs from environment file
    - Converts to JSON format
-   - Derives 32-byte key from password using BLAKE2s
    - Generates random 12-byte nonce
-   - Encrypts with ChaCha20-Poly1305
-   - Creates integrity hash of encrypted data
+   - Derives 32-byte encryption key from password using PBKDF2-HMAC-SHA256 (300,000 iterations) with the nonce as salt
+   - Encrypts with ChaCha20-Poly1305 AEAD
+   - Creates BLAKE2s integrity hash of encrypted data
    - Writes compiled binary file
 
 2. **Decryption Process**:
-   - Reads compiled file using memory mapping
-   - Verifies integrity hash
+   - Reads compiled file using memory mapping for efficiency
+   - Extracts nonce and derives the same encryption key using PBKDF2-HMAC-SHA256
+   - Verifies integrity hash using constant-time comparison (protects against timing attacks)
    - Decrypts using ChaCha20-Poly1305
-   - Returns dictionary of environment variables
+   - Returns dictionary of environment variables or None if verification/decryption fails
 
 ## Security Notes
 
-- Never commit your encryption keys to version control
+- Never commit your encryption keys/passwords to version control
 - Store keys in secure key management systems (e.g., HashiCorp Vault, AWS Secrets Manager)
 - The `.compiled` files are safe to commit but useless without the encryption key
+- **PBKDF2 with 300,000 iterations** makes brute-force attacks computationally expensive (even with weak passwords)
+- **Constant-time comparison** using `hmac.compare_digest()` prevents timing attacks during integrity verification
 - BLAKE2s verification ensures files haven't been tampered with
+- ChaCha20-Poly1305 AEAD provides both confidentiality and authenticity
 
 ## Compiling crypto.dll for Other Platforms
 
