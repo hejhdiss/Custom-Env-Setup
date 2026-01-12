@@ -1,4 +1,7 @@
-
+/* 
+Copyright @hejhdiss(Muhammed Shafin P)
+Licensed under GPLV3.
+*/
 
 
 #include <openssl/evp.h>
