@@ -88,61 +88,78 @@ class Generate:
              f.truncate(4)
         os.remove(self.fpath)
 class Getter:
-    def __init__(self,path:str,key:str) -> None:
-        self.path=path
-        self.key=key
-        self.env={}
-        if not os.path.exists(path):
-             raise ValueError('Not a Valid Path')
-        self.fpath=os.path.abspath(self.path)
-        with open(self.fpath,'rb') as f:
-            with mmap.mmap(f.fileno(),0,access=mmap.ACCESS_READ) as mm:
-                MIN_HEADER_SIZE=64
-                if len(mm) < MIN_HEADER_SIZE:
-                    raise ValueError("Corrupt file")
-                self.cipher_len=int.from_bytes(mm[:4],'big')
-                total_needed=MIN_HEADER_SIZE+self.cipher_len
-                if len(mm) < total_needed:
-                    raise ValueError("Truncated ciphertext")
-                self.compiled_=mm[4:36]
-                self.nonce=mm[36:48]
-                self.key_=self.key_ = pbkdf2_hmac(
-    'sha256',
-    key.encode('utf-8'),
-    self.nonce,     
-    300_000,         
-    dklen=32
-)
-                self.tag=mm[48:64]
-                middleno=64+self.cipher_len
-                self.ciphertext=mm[64: middleno]
-                self.compiled=self.nonce+self.tag+self.ciphertext
-                if not hmac.compare_digest(self.compiled_,blake2s(self.compiled).digest()):
-                    self.env=None
-                else:
-                    lib.chacha_decrypt.argtypes = [
-                    POINTER(c_ubyte), c_int, POINTER(c_ubyte), POINTER(c_ubyte),
-                    POINTER(c_ubyte), POINTER(c_char)
-                    ]
-                    lib.chacha_decrypt.restype = c_int
-                    key_buffer = (c_ubyte * KEY_SIZE).from_buffer_copy(self.key_)
-                    nonce_buffer = (c_ubyte * NONCE_SIZE).from_buffer_copy(self.nonce)
-                    ciphertext_buffer = (c_ubyte * self.cipher_len).from_buffer_copy(self.ciphertext)
-                    tag_buffer = (c_ubyte * TAG_SIZE).from_buffer_copy(self.tag)
-                    decrypted = create_string_buffer(self.cipher_len)
-                    dec_len = lib.chacha_decrypt(
-                    ciphertext_buffer,
-                    self.cipher_len,
-                    tag_buffer,
-                    key_buffer,
-                    nonce_buffer,
-                    decrypted
-                    )
-                    if dec_len == -1:
+    def __init__(self,path:str,key:str,*,env=False) -> None:
+        try:
+            self.path=path
+            self.key=key
+            self.env={}
+            if not os.path.exists(path):
+                raise ValueError('Not a Valid Path')
+            self.fpath=os.path.abspath(self.path)
+            with open(self.fpath,'rb') as f:
+                with mmap.mmap(f.fileno(),0,access=mmap.ACCESS_READ) as mm:
+                    MIN_HEADER_SIZE=64
+                    if len(mm) < MIN_HEADER_SIZE:
+                        raise ValueError("Corrupt file")
+                    self.cipher_len=int.from_bytes(mm[:4],'big')
+                    total_needed=MIN_HEADER_SIZE+self.cipher_len
+                    if len(mm) < total_needed:
+                        raise ValueError("Truncated ciphertext")
+                    self.compiled_=mm[4:36]
+                    self.nonce=mm[36:48]
+                    self.key_=self.key_ = pbkdf2_hmac(
+        'sha256',
+        key.encode('utf-8'),
+        self.nonce,     
+        300_000,         
+        dklen=32
+    )
+                    self.tag=mm[48:64]
+                    middleno=64+self.cipher_len
+                    self.ciphertext=mm[64: middleno]
+                    self.compiled=self.nonce+self.tag+self.ciphertext
+                    if not hmac.compare_digest(self.compiled_,blake2s(self.compiled).digest()):
                         self.env=None
                     else:
-                        json_bytes = decrypted.raw[:dec_len]
-                        self.env = json.loads(json_bytes.decode('utf-8',errors='strict'))
+                        lib.chacha_decrypt.argtypes = [
+                        POINTER(c_ubyte), c_int, POINTER(c_ubyte), POINTER(c_ubyte),
+                        POINTER(c_ubyte), POINTER(c_char)
+                        ]
+                        lib.chacha_decrypt.restype = c_int
+                        key_buffer = (c_ubyte * KEY_SIZE).from_buffer_copy(self.key_)
+                        nonce_buffer = (c_ubyte * NONCE_SIZE).from_buffer_copy(self.nonce)
+                        ciphertext_buffer = (c_ubyte * self.cipher_len).from_buffer_copy(self.ciphertext)
+                        tag_buffer = (c_ubyte * TAG_SIZE).from_buffer_copy(self.tag)
+                        decrypted = create_string_buffer(self.cipher_len)
+                        dec_len = lib.chacha_decrypt(
+                        ciphertext_buffer,
+                        self.cipher_len,
+                        tag_buffer,
+                        key_buffer,
+                        nonce_buffer,
+                        decrypted
+                        )
+                        if dec_len == -1:
+                            self.env=None
+                        else:
+                            json_bytes = decrypted.raw[:dec_len]
+                            self.env = json.loads(json_bytes.decode('utf-8',errors='strict'))
+        except Exception:
+            self.env=None
+        finally:
+            if env:
+                if not self.env is None:
+                    for i in self.env:
+                        os.environ[i]=self.env[i]
+                    self.__dict__.clear()
+            else:
+                a=self.env
+                self.__dict__.clear()
+                self.env=a
+
+
+
+
         
                 
 
