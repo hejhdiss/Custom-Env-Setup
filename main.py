@@ -92,7 +92,13 @@ class Getter:
         self.fpath=os.path.abspath(self.path)
         with open(self.fpath,'rb') as f:
             with mmap.mmap(f.fileno(),0,access=mmap.ACCESS_READ) as mm:
+                MIN_HEADER_SIZE=64
+                if len(mm) < MIN_HEADER_SIZE:
+                    raise ValueError("Corrupt file")
                 self.cipher_len=int.from_bytes(mm[:4],'big')
+                total_needed=MIN_HEADER_SIZE+self.cipher_len
+                if len(mm) < total_needed:
+                    raise ValueError("Truncated ciphertext")
                 self.compiled_=mm[4:36]
                 self.nonce=mm[36:48]
                 self.tag=mm[48:64]
