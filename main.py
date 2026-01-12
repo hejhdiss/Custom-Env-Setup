@@ -7,6 +7,7 @@ import os
 from hashlib import blake2s
 import os
 import json
+import hmac
 import mmap
 lib = CDLL("./crypto.dll")
 KEY_SIZE = 32
@@ -17,7 +18,7 @@ class Generate:
     def __init__(self,name:str,key:str)->None:
         self.path=name
         self.key=key
-        self.key_=blake2s(key.encode()).digest()
+        self.key_=blake2s(key.encode(),key=self.key.encode()).digest()
         if not os.path.exists(name):
             raise ValueError('Not a Valid Path')
         self.fpath=os.path.abspath(name)
@@ -85,46 +86,45 @@ class Getter:
         self.path=path
         self.key=key
         self.env={}
-        self.key_=blake2s(key.encode()).digest()
+        self.key_=blake2s(key.encode(),key=self.key.encode()).digest()
         if not os.path.exists(path):
              raise ValueError('Not a Valid Path')
         self.fpath=os.path.abspath(self.path)
         with open(self.fpath,'rb') as f:
-            mm=mmap.mmap(f.fileno(),0,access=mmap.ACCESS_READ)
-            self.cipher_len=int.from_bytes(mm[:4],'big')
-            self.compiled_=mm[4:36]
-            self.nonce=mm[36:48]
-            self.tag=mm[48:64]
-            middleno=64+self.cipher_len
-            self.ciphertext=mm[64: middleno]
-            self.compiled=self.nonce+self.tag+self.ciphertext
-            if not self.compiled_==blake2s(self.compiled).digest():
-                self.env=None
-            else:
-                lib.chacha_decrypt.argtypes = [
-                POINTER(c_ubyte), c_int, POINTER(c_ubyte), POINTER(c_ubyte),
-                POINTER(c_ubyte), POINTER(c_char)
-                ]
-                lib.chacha_decrypt.restype = c_int
-                key_buffer = (c_ubyte * KEY_SIZE).from_buffer_copy(self.key_)
-                nonce_buffer = (c_ubyte * NONCE_SIZE).from_buffer_copy(self.nonce)
-                ciphertext_buffer = (c_ubyte * self.cipher_len).from_buffer_copy(self.ciphertext)
-                tag_buffer = (c_ubyte * TAG_SIZE).from_buffer_copy(self.tag)
-                decrypted = create_string_buffer(self.cipher_len)
-                dec_len = lib.chacha_decrypt(
-                ciphertext_buffer,
-                self.cipher_len,
-                tag_buffer,
-                key_buffer,
-                nonce_buffer,
-                decrypted
-                )
-                if dec_len == -1:
+            with mmap.mmap(f.fileno(),0,access=mmap.ACCESS_READ) as mm:
+                self.cipher_len=int.from_bytes(mm[:4],'big')
+                self.compiled_=mm[4:36]
+                self.nonce=mm[36:48]
+                self.tag=mm[48:64]
+                middleno=64+self.cipher_len
+                self.ciphertext=mm[64: middleno]
+                self.compiled=self.nonce+self.tag+self.ciphertext
+                if not hmac.compare_digest(self.compiled_,blake2s(self.compiled).digest()):
                     self.env=None
                 else:
-                    json_bytes = decrypted.raw[:dec_len]
-                    self.env = json.loads(json_bytes.decode())
-            mm.close()
+                    lib.chacha_decrypt.argtypes = [
+                    POINTER(c_ubyte), c_int, POINTER(c_ubyte), POINTER(c_ubyte),
+                    POINTER(c_ubyte), POINTER(c_char)
+                    ]
+                    lib.chacha_decrypt.restype = c_int
+                    key_buffer = (c_ubyte * KEY_SIZE).from_buffer_copy(self.key_)
+                    nonce_buffer = (c_ubyte * NONCE_SIZE).from_buffer_copy(self.nonce)
+                    ciphertext_buffer = (c_ubyte * self.cipher_len).from_buffer_copy(self.ciphertext)
+                    tag_buffer = (c_ubyte * TAG_SIZE).from_buffer_copy(self.tag)
+                    decrypted = create_string_buffer(self.cipher_len)
+                    dec_len = lib.chacha_decrypt(
+                    ciphertext_buffer,
+                    self.cipher_len,
+                    tag_buffer,
+                    key_buffer,
+                    nonce_buffer,
+                    decrypted
+                    )
+                    if dec_len == -1:
+                        self.env=None
+                    else:
+                        json_bytes = decrypted.raw[:dec_len]
+                        self.env = json.loads(json_bytes.decode('utf-8',errors='strict'))
         
                 
 
