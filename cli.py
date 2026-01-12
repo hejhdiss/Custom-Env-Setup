@@ -11,7 +11,10 @@ import json
 import logging
 import datetime
 import sys
-lib = CDLL("./crypto.dll")
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DLL_PATH = os.path.join(BASE_DIR, "crypto.dll")
+lib = CDLL(DLL_PATH)
 KEY_SIZE = 32
 NONCE_SIZE = 12
 TAG_SIZE = 16
