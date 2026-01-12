@@ -4,7 +4,7 @@
 
 from ctypes import CDLL, c_int, c_ubyte, create_string_buffer, POINTER,c_char
 import os
-from hashlib import blake2s
+from hashlib import blake2s ,pbkdf2_hmac
 import os
 import json
 import hmac
@@ -18,7 +18,15 @@ class Generate:
     def __init__(self,name:str,key:str)->None:
         self.path=name
         self.key=key
-        self.key_=blake2s(key.encode(),key=self.key.encode()).digest()
+        nonce = os.urandom(NONCE_SIZE)
+        self.nonce=nonce
+        self.key_=self.key_ = pbkdf2_hmac(
+    'sha256',
+    key.encode('utf-8'),
+    self.nonce,     
+    300_000,         
+    dklen=32
+)
         if not os.path.exists(name):
             raise ValueError('Not a Valid Path')
         self.fpath=os.path.abspath(name)
@@ -45,9 +53,7 @@ class Generate:
         self.value=json.dumps(self.k)
         self.value_=self.value.encode()
         key_buffer = (c_ubyte * KEY_SIZE).from_buffer_copy(self.key_)
-        nonce = os.urandom(NONCE_SIZE)
-        self.nonce=nonce
-        nonce_buffer = (c_ubyte * NONCE_SIZE).from_buffer_copy(nonce)
+        nonce_buffer = (c_ubyte * NONCE_SIZE).from_buffer_copy(self.nonce)
         pt_len = len(self.value_)
         self.pt_len=pt_len
         pt_buffer = (c_ubyte * pt_len).from_buffer_copy(self.value_)
@@ -70,12 +76,12 @@ class Generate:
             raise ValueError("Encryption failed")
         self.cipher_len=cipher_len
         #[hash (32 bytes) | nonce (12) | tag (16) | ciphertext (cipher_len)]
-        compiled_data = nonce + tag.raw + ciphertext.raw[:cipher_len]
+        compiled_data = self.nonce + tag.raw + ciphertext.raw[:cipher_len]
         self.compiled_=blake2s(compiled_data).digest()
         with open(self.gen_f, 'wb') as f:
             f.write(cipher_len.to_bytes(4,'big')) # 4
             f.write(self.compiled_)      # 32
-            f.write(nonce)               # 12 
+            f.write(self.nonce)               # 12 
             f.write(tag.raw)             # 16 
             f.write(ciphertext.raw[:cipher_len])  # ciphertxt
         with open(self.fpath,'wb') as f:
@@ -86,7 +92,6 @@ class Getter:
         self.path=path
         self.key=key
         self.env={}
-        self.key_=blake2s(key.encode(),key=self.key.encode()).digest()
         if not os.path.exists(path):
              raise ValueError('Not a Valid Path')
         self.fpath=os.path.abspath(self.path)
@@ -101,6 +106,13 @@ class Getter:
                     raise ValueError("Truncated ciphertext")
                 self.compiled_=mm[4:36]
                 self.nonce=mm[36:48]
+                self.key_=self.key_ = pbkdf2_hmac(
+    'sha256',
+    key.encode('utf-8'),
+    self.nonce,     
+    300_000,         
+    dklen=32
+)
                 self.tag=mm[48:64]
                 middleno=64+self.cipher_len
                 self.ciphertext=mm[64: middleno]
