@@ -2,6 +2,29 @@
 
 A custom environment variable encryption tool for Python developers that provides secure storage of sensitive configuration data using ChaCha20-Poly1305 encryption and BLAKE2s hashing.
 
+## TL;DR
+
+**Encrypted Environment Manager** is a proof-of-concept tool that encrypts `.env` and configuration files so they can be safely stored in version control or shared without exposing secrets.
+
+- 🔒 Uses **ChaCha20-Poly1305 (AEAD)** for authenticated encryption  
+- 🔑 Derives keys using **PBKDF2-HMAC-SHA256** with **300,000 iterations**  
+- ✅ Verifies integrity using **BLAKE2s** with constant-time comparison  
+- 📦 Produces encrypted `.compiled` files that are useless without the key  
+- 🛠️ Designed as an **educational PoC** demonstrating a secure env-encryption pattern  
+
+**Intended use:** development environments, learning, and custom security workflows.  
+**Not production-ready by default** (no versioning, simplified salt handling), but easily extensible.
+
+```bash
+# Encrypt an env file
+python cli.py -k mySecretKey -f .env
+```
+```bash
+# Load encrypted variables in Python
+from main import Getter
+env = Getter('.env.compiled', 'mySecretKey').env
+```
+
 ## Overview
 
 This is my original design and implementation - a custom solution I created from scratch after seeing developers online struggling with `.env` file security. I noticed that `.env` files are inherently insecure when stored in repositories or shared across teams, so I designed this encryption-based approach to solve that problem.
@@ -249,6 +272,14 @@ You can increase security and production-readiness by:
 - Adding key rotation mechanisms
 - Implementing proper error handling and logging for production environments
 - Adding additional layers of protection based on your threat model
+
+## Threat Model (Out of Scope)
+
+This tool does NOT protect against:
+- Compromised runtime memory
+- Malicious insiders with key access
+- Keylogging or malware on the host system
+
 
 ### For Developers
 - 🔧 **Modifiable**: Feel free to modify this code to meet your specific security requirements
